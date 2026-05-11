@@ -11,28 +11,56 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r test}
+
+
+```
+
+
+```{r simulations}
+
 library("truncnorm")
 
+
+set.seed(1234)
 
 drivers <- seq(3.8, 4.18, 0.02)
 anzahl_fahrer <- length(drivers)
 anzahl_rennen <- 1000
+anzahl_runden <- 60
 
 rennzeiten <- matrix(0, nrow = anzahl_rennen, ncol = anzahl_fahrer)
 
-for (rennen_idx in 1:anzahl_rennen) {
-  for (fahrer_idx in 1:anzahl_fahrer) {
-    mean_zeit <- drivers[fahrer_idx] 
+for (rennen_n in 1:anzahl_rennen) {
+  for (fahrer_n in 1:anzahl_fahrer) {
     
-    s <- mean_zeit / 20
-    a <- mean_zeit - 4 * s
-    b <- mean_zeit + 4 * s
-
-    rennen <- rtruncnorm(n = 60, a = a, b = b, mean = mean_zeit, sd = s)
-    rennzeiten[rennen_idx, fahrer_idx] <- sum(rennen)
+    #Wann Boxenstopp?
+    
+    rennen <- rep(NA, times = anzahl_runden)
+    
+    for (runde_n in 1:anzahl_runden){
+      
+      #Motorschaden:
+      s <- c(TRUE, FALSE)
+      chance <-  fix + runde_n*verlässlichkeit
+      sample(s, 1, c(chance, 1-chance))
+      #Reifengrip:
+      rweibull(...)
+      #Boxenstopp?
+      if (runde_n %in% boxenstopps):
+        boxenstopp_zeit <- boxenstopp_zeit + rtruncnorm(...)
+        
+      mean_zeit <- drivers[fahrer_n] 
+      
+      s <- mean_zeit / 20
+      a <- mean_zeit - 4 * s
+      b <- mean_zeit + 4 * s
+  
+      runde <- rtruncnorm(n = 1, a = a, b = b, mean = mean_zeit, sd = s)
+      rennen[runde_n] <- runde
+    }
+    rennzeiten[rennen_n, fahrer_n] <- sum(rennen)
   }
 }
-factor()
 
 platzierungen <- t(apply(rennzeiten, 1, rank))
 
@@ -46,12 +74,6 @@ zusammenfassung <- apply(platzierungen, 2, zaehle_plaetze)
 colnames(zusammenfassung) <- paste0("Fahrer_", 1:anzahl_fahrer)
 
 print(zusammenfassung[1:5, 1:5])
-
-```
-
-
-```{r simulations}
-
 
 
 ```
