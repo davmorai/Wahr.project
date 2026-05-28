@@ -4,7 +4,7 @@ format: html
 editor: visual
 ---
 
-## Fixe Parameter E/P/O/H/K
+## Fixe Parameter E/P/O/H/K bleiben bei MC sowie beim Test 1
 
 ```{r,echo=F}
 set.seed(42) 
@@ -49,7 +49,7 @@ start_reifen_fahrer <- sample(1:3, anzahl_fahrer, replace = TRUE)
 
 ```
 
-## Stochastische Variablen B,F,G,J,N,I,M
+## Stochastische Variablen B,F,G,J,N,I,M- Test 1 Rennen
 
 ```{r, echo= FALSE}
 #notwendige Variablen
@@ -125,51 +125,32 @@ for (runde in 1:e_total_rounds) {
   
   # N: Motorschaden prüfen
   # Wenn die aktuelle Runde die vorberechnete Ausfallrunde überschreitet, bekommt der   Fahrer eine unendliche Rundenzeit (Ausfall)
-  b_round_time[n_motor_fail < runde] <- Inf
+  total_round_time[n_motor_fail < runde] <- Inf
   
   # Ergebnis der 22 Fahrer in die aktuelle Zeile der Matrix schreiben
   round_time_matrix[runde, ] <- total_round_time
   pitstop_time_matrix[runde, ] <- pitstop_time
   penalty_count_matrix[runde, ] <- penalty_check
-  
-
 }
 
-```
-
-##A-Gesamtzeit ----fertig nur verschönern
-
-```{r, echo= True}
-a_total_time <- colSums(round_time_matrix)
-a_total_time /60 #in minuten
-#Zeiten aller 22 Fahrer
 ```
 
 ##Z- Platz am Ende
 
 ```{r, echo= FALSE}
+# A -Gesamtzeiten
+a_total_time <- colSums(round_time_matrix)
+a_total_time /60 #in minuten
+
+# Z -Ranking wer am wenigsten Zeit gebraucht hat (A)
 z_placements <- rank(a_total_time, ties.method = "min")
 
-#wer am wenigste A hat oder bei N die meisten Runden gewinnt
-```
-
-##C-Zeit für Boxenstopps
-
-```{r, echo= FALSE}
-
+# C -kum. summe der F eines fahrers über das ganze Rennen
 c_total_box <- colSums(pitstop_time_matrix)
-#kum. summe der F eines fahrers über das ganze Rennen
-```
 
-##D-Strafen
-
-```{r, echo= FALSE}
-
+# D -Summe aller Runden in dennen I - einser geworfen hat
 d_total_penalty <- colSums(penalty_count_matrix)
-#Summe aller Runden in dennen I - einser geworfen hat
-```
 
-```{r, echo= FALSE}
 #Anzahl Boxenstops Counter
 anzahl_boxenstopps <- colSums(pitstop_time_matrix > 0)
 
@@ -191,8 +172,109 @@ ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
 ergebnis_df
 ```
 
-##Stochastische Sim
+##Monte Carlo Simulation
 
 ```{r, echo= FALSE}
+#set.seed(123)#reproduzieren
 
+
+n_sims <- 10000
+placements_matrix <- matrix(0,nrow=anzahl_fahrer, ncol = anzahl_fahrer)
+
+for (sim in 1:n_sims) {
+  
+  #Startbedingungen reseten nach jede Simulation
+  l_tires <- rep(0,anzahl_fahrer)#Reifen vor jedem Start
+  n_motor_fail_mc <- rweibull(anzahl_fahrer, shape = 3.0, scale = 120)
+  total_times <- rep(0,anzahl_fahrer)
+  
+  for (runde in 1:e_total_rounds) {
+  
+  # Deterministische Updates
+  l_tires <- l_tires + 1
+  q_actual_weight_malus <- weight_penalty - (runde * gas_per_round)
+  m_actual_temp <- runif(1, min = 20, max = 30)
+  m_temp_factor <- (m_actual_temp - 25) * 0.05 #ein teil von M
+  
+  #Reifenabnutzung
+  tire_malus <- pweibull(l_tires_age, shape = aktuelle_betas, scale = aktuelle_lambdas)#J
+  l_tire_degradation <- tire_malus * 5.0 #J
+  
+  #Mu berechnung für B und Rundenzeiten
+  mu_aktuell <- start_time_driver + q_actual_weight_malus + l_tire_degradation + m_temp_factor#B
+  b_round_time <- rnorm(anzahl_fahrer, mean = mu_aktuell, sd = 0.8)#B- erste zeit für jeden fahrer
+  
+  # I & G- Fehler/Strafen
+  penalty_check <- rbinom(anzahl_fahrer, size = 1, prob = 0.05) 
+  penalty_time <- rlnorm(anzahl_fahrer, meanlog = 1, sdlog = 0.5) * penalty_check
+  
+  #C- kum. Summe von F über das ganze Rennen
+  #F- Boxenstoppzeit
+  pitstop_trigger <- tire_malus >= 0.33
+  anzahl_stopper <- sum(pitstop_trigger)
+  
+  
+  f_pitstop_time <- rep(0,anzahl_fahrer)
+  if (anzahl_stopper > 0){
+    f_pitstop_time[pitstop_trigger] <- rlnorm(anzahl_stopper,meanlog=1.0 ,sdlog=0.2) #F Boxstoppzeit
+    l_tires[pitstop_trigger] <- 0 #L reset
+  }
+  
+  # Fehlerzeit zur Rundenzeit addieren
+  total_round_time <- b_round_time + penalty_time + pitstop_time
+    total_round_time[n_motor_fail_mc < runde] <- Inf # N-Check ob Motor geht
+    
+    total_times <- total_round_time + total_times #zählt alle runden zsm
+  
+  }
+  #Ranking des aktuelles Rennens
+  placements <- rank(total_times, ties.method = "min")
+  
+  #Rank speichern in die Matrix
+  for (f in 1:anzahl_fahrer){
+    p <- placements[f]
+    placements_matrix[f,p] <- placements_matrix[f,p]+1
+  }
+  
+}
+
+
+ergebnis_df <- data.frame(
+  Fahrer_ID = 1:anzahl_fahrer,
+  Platz = placements,
+  Reifen_Start = k_reifen$reifen_typ[start_reifen_fahrer],
+  Gesamtzeit_Minuten = round(total_times / 60, 2),
+  Anzahl_Stopps = anzahl_boxenstopps,         
+  Anzahl_Strafen = d_total_penalty,
+  Boxenzeit_Sek = round(c_total_box, 2)
+)
+
+# Sortieren nach Platzierung
+ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
+print(ergebnis_df) #für schönere Darstellung sonst mehrere Tabs
+
+#Wahrscheinlichkeiten berechnen
+prob_matrix <- placements_matrix / n_sims
+prob_matrix
+
+#visualisiere
+#präsentation - fragestellung, prozess detaliert beschreiben
+
+```
+
+```{r, echo= FALSE}
+library(ggplot2) #install.packages("ggplot2")
+
+df_melted <- as.data.frame(as.table(prob_matrix))
+colnames(df_melted) <- c("Fahrer", "Platzierung", "Wahrscheinlichkeit")
+
+ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrscheinlichkeit)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_minimal() +
+  labs(title = "Monte Carlo Simulation: Wahrscheinlichkeitsverteilung der Platzierungen",
+       x = "Platzierung am Rennende",
+       y = "Fahrer ID",
+       fill = "Wahrscheinlichkeit") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
 ```
