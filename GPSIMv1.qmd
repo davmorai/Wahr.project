@@ -1,0 +1,152 @@
+---
+title: "GPSim quatro V1"
+format: html
+editor: visual
+---
+
+## Fixe Parameter E/P/O/H/K
+
+```{r,echo=F}
+set.seed(42) 
+anzahl_fahrer <- 22
+
+#E-RundenAnzahl
+e_total_rounds = 70
+#laut google zwischen 42 in Monaco und 72 in Zandervoot Niederlande
+
+#Max zeitrahmen ist meistens bei 2 Std limitiert, falls das Rennen durch G zu lang wird greift max_time ein.
+max_time_sec = 7200 #besser in sek für reproduzierbarkeit und genauigkeit und gleicher mass
+time_per_round= 90 #Sekunden
+weight_penalty <- 3.5 # für Q;in Sekunden
+gas_per_round <- 3.5 / e_total_rounds
+
+# O- Auto Performance (11 Teams, Werte in Sekunden)
+# Negative Werte machen das Auto schneller
+o_team_perf <- c(-2.0, -1.5,-1.2,-1.0, -0.5, 0.0, 0.2, 0.5, 0.8, 1.2, 1.5)
+o_team_car <- rep(o_team_perf, each = 2) 
+# team_car ergibt 22 Autos, gedanke dahinter ist Redbull -2sek und Hass langsamer +1.5sek
+
+# H- Fahrerskill (22 individuelle Fahrer)
+# Wir ziehen die Skills zufällig aus einer Normalverteilung, 
+# aber fixieren sie vor dem Rennen
+h_driver_skill <- rnorm(anzahl_fahrer, mean = 0, sd = 0.3) 
+
+# Kombinierter Fix-Wert für die Simulation:
+# Diese Basis-Zeit hat jeder der 22 Fahrer in Runde 1
+start_time_driver <- time_per_round + o_team_Car - h_driver_skill
+
+
+# K-ReifenWir definieren die Parameter der Reifen als Data-Frame für einfachen Zugriff
+k_reifen <- data.frame(
+  reifen_typ = c("Soft", "Medium", "Hard"),
+  speed_bonus = c(-1.5, -0.5, 0.5), # wird von der Rundenzeit abgezogen in sek
+  k_beta = c(4.0, 2.5, 1.5), # Abnutzungsgrad- hohes beta= hohe Verschleiss
+  k_lambda = c(15, 25, 40)   # Lebensdauer, ab wann der Reifen sich stark abbaut
+)
+# Wir weisen für den Start jedem Fahrer zufällig einen Reifen zu 
+#(1=Soft, 2=Medium, 3=Hard) - verändert die Paramater für J
+start_reifen_fahrer <- sample(1:3, anzahl_fahrer, replace = TRUE)
+
+```
+
+## Stochastische Variablen B,F,G,J,N,I,M
+```{r, echo= FALSE}
+#notwendige Variablen
+round_time_matrix <- matrix(NA,nrow = e_total_rounds, ncol = anzahl_fahrer)#Zeilen =runden, Spalten=Fahrer
+l_tires_age <- rep(0, anzahl_fahrer) #L-Startet bei 0 für alle
+
+
+#N- Motorschaden
+n_motor_fail <- rweibull(Anzahl_Fahrer, shape = 3.0, scale = 120)
+
+#lambda von 3 deutet als Fehlerrate zunemnd bei Alter(hier Abnutzung) , scale ist meisten 1/lambda hier aber auf 120 skaliert das bedeutet im Schnitt hält es 120 Runden
+#Ausfallwahrscheinlichkeit pro Runde exponentiell ansteigend
+
+# Main Schleife
+for (runde in 1:E_Runden) {
+  
+  # Deterministische Updates
+  total_tire_age <- l_tires_age + 1 #später Var auf L_ wechseln
+  # Q: Das Auto wird leichter, der Malus sinkt stetig
+  q_actual_weight_malus <- weight_penalty - (runde * gas_per_round)
+  
+  # M: Temperatur (Uniform-Verteilung)
+  # Schwankt pro Runde zufällig zwischen 20 und 30 Grad.
+  m_actual_temp <- runif(1, min = 20, max = 30)
+  temp_factor <- (m_actual_temp - 25) * 0.05 
+
+  # J: Reifenzustand (Weibull-Verteilungsfunktion)
+  #Der kumulative Verschleiss (die Wahrscheinlichkeit des Versagens bis zu einem        bestimmten Reifenalter) wird mit pweibull()  in einen stetig ansteigenden Zeit-Malus   umgerechnet.
+  #Verschleisskurve pro Runde, Chance auf plötzliche Abfall steigt mit Beta grösser     als 1- dann folgt zerstörung einer oder von mehrere nReifen
+  # pweibull gibt uns die Degradation (0 bis 1), die wir als Zeit-Malus nutzen
+  tire_malus <- pweibull(l_tires_age, shape = 2.5, scale = 25) * 5.0 
+  
+  # B: Rundenzeit (Normalverteilung)
+  # Der Erwartungswert mu verschiebt sich dynamisch für alle 22 Fahrer.
+  mu_aktuell <- start_time_driver + q_actual_weight_malus + tire_malus + temp_factor
+  b_round_time <- rnorm(anzahl_fahrer, mean = mu_aktuell, sd = 0.8)#1 zeit für jeden    fahrer
+  
+  # I & G: Strafenanfälligkeit und Fehlerzeit (Bernoulli & Lognormal)
+  # Bernoulli: Passiert ein Fehler? (1 = Ja, 0 = Nein) für 22 Fahrer
+  penalty_check <- rbinom(anzahl_fahrer, size = 1, prob = 0.05) 
+  
+  # Lognormal: Wenn ein Fehler passiert, wie viel Zeit kostet er?
+  #wird rechtschiefe Verteilung haben, kann keine negative Werte einnehmen, kann in     extrem Fällen auch 10 sek überschreiten oder zu elemination führen, dies wäre aber   komplexer
+  #Strafe oder Verzögerung bei unvorhergesehenen Ergebnissen. Zuzüglich Rundenzeit.
+  penalty_time <- rlnorm(anzahl_fahrer, meanlog = 1, sdlog = 0.5) * penalty_check
+  
+  # Fehlerzeit zur Rundenzeit addieren
+  total_round_time <- b_round_time + penalty_time
+  
+  # N: Motorschaden prüfen
+  # Wenn die aktuelle Runde die vorberechnete Ausfallrunde überschreitet, bekommt der   Fahrer eine unendliche Rundenzeit (Ausfall)
+  b_round_time[n_motor_fail < runde] <- Inf
+  
+  # Ergebnis der 22 Fahrer in die aktuelle Zeile der Matrix schreiben
+  round_time_matrix[runde, ] <- b_round_time
+}
+
+```
+
+##Z- Platz am Ende
+
+```{r, echo= FALSE}
+rank(A,ties.method ="min")
+
+#wer am wenigste A hat oder bei N die meisten Runden gewinnt
+```
+
+##A-Gesamtzeit ----fertig nur verschönern
+
+```{r, echo= FALSE}
+#Summe aller B,C,G
+colSums(round_time_matrix) #Zeiten aller 22 Fahrer
+```
+
+
+##C-Zeit für Boxenstopps ---neue Matrix vlt?
+
+```{r, echo= FALSE}
+#kum. summe der F eines fahrers über das ganze Rennen
+```
+
+##D-Strafen
+
+```{r, echo= FALSE}
+#Summe aller Runden in dennen I - einser geworfen hat
+```
+
+
+##L- Reifenalter
+
+```{r, echo= FALSE}
+#Runden zähler wird bei einen Boxenstopp C oder F wieder auf 0 gesetzt
+#siehe oben beim zähler mit auf 0 noch nicht ganz gemacht
+```
+
+
+##Monte Carlo Sim
+
+```{r, echo= FALSE}
+
+```
