@@ -33,7 +33,7 @@ h_driver_skill <- rnorm(anzahl_fahrer, mean = 0, sd = 0.3)
 
 # Kombinierter Fix-Wert für die Simulation:
 # Diese Basis-Zeit hat jeder der 22 Fahrer in Runde 1
-start_time_driver <- time_per_round + o_team_Car - h_driver_skill
+start_time_driver <- time_per_round + o_team_car - h_driver_skill
 
 
 # K-ReifenWir definieren die Parameter der Reifen als Data-Frame für einfachen Zugriff
@@ -50,23 +50,34 @@ start_reifen_fahrer <- sample(1:3, anzahl_fahrer, replace = TRUE)
 ```
 
 ## Stochastische Variablen B,F,G,J,N,I,M
+
 ```{r, echo= FALSE}
 #notwendige Variablen
 round_time_matrix <- matrix(NA,nrow = e_total_rounds, ncol = anzahl_fahrer)#Zeilen =runden, Spalten=Fahrer
+pitstop_time_matrix <- matrix(0, nrow = e_total_rounds, ncol = anzahl_fahrer) # Für C
+penalty_count_matrix <- matrix(0, nrow = e_total_rounds, ncol = anzahl_fahrer) #Für D
+
+#Start von L
 l_tires_age <- rep(0, anzahl_fahrer) #L-Startet bei 0 für alle
 
-
 #N- Motorschaden
-n_motor_fail <- rweibull(Anzahl_Fahrer, shape = 3.0, scale = 120)
+n_motor_fail <- rweibull(anzahl_fahrer, shape = 3.0, scale = 120)
 
 #lambda von 3 deutet als Fehlerrate zunemnd bei Alter(hier Abnutzung) , scale ist meisten 1/lambda hier aber auf 120 skaliert das bedeutet im Schnitt hält es 120 Runden
 #Ausfallwahrscheinlichkeit pro Runde exponentiell ansteigend
 
+
+# Reifen-Parameter für jeden Fahrer anhand des Startreifens ziehen
+aktuelle_betas <- k_reifen$k_beta[start_reifen_fahrer]
+aktuelle_lambdas <- k_reifen$k_lambda[start_reifen_fahrer]
+
+
 # Main Schleife
-for (runde in 1:E_Runden) {
+for (runde in 1:e_total_rounds) {
   
   # Deterministische Updates
-  total_tire_age <- l_tires_age + 1 #später Var auf L_ wechseln
+  l_tires_age <- l_tires_age + 1 #später Var auf L_ wechseln
+  
   # Q: Das Auto wird leichter, der Malus sinkt stetig
   q_actual_weight_malus <- weight_penalty - (runde * gas_per_round)
   
@@ -79,7 +90,8 @@ for (runde in 1:E_Runden) {
   #Der kumulative Verschleiss (die Wahrscheinlichkeit des Versagens bis zu einem        bestimmten Reifenalter) wird mit pweibull()  in einen stetig ansteigenden Zeit-Malus   umgerechnet.
   #Verschleisskurve pro Runde, Chance auf plötzliche Abfall steigt mit Beta grösser     als 1- dann folgt zerstörung einer oder von mehrere nReifen
   # pweibull gibt uns die Degradation (0 bis 1), die wir als Zeit-Malus nutzen
-  tire_malus <- pweibull(l_tires_age, shape = 2.5, scale = 25) * 5.0 
+  tire_malus <- pweibull(l_tires_age, shape = aktuelle_betas, scale = aktuelle_lambdas)
+  tire_degradation <- tire_malus * 5.0
   
   # B: Rundenzeit (Normalverteilung)
   # Der Erwartungswert mu verschiebt sich dynamisch für alle 22 Fahrer.
@@ -95,58 +107,100 @@ for (runde in 1:E_Runden) {
   #Strafe oder Verzögerung bei unvorhergesehenen Ergebnissen. Zuzüglich Rundenzeit.
   penalty_time <- rlnorm(anzahl_fahrer, meanlog = 1, sdlog = 0.5) * penalty_check
   
+  #C-kum. summe der F eines fahrers über das ganze Rennen
+  #F- Boxenstoppzeit
+  pitstop_trigger <- tire_malus >= 0.33
+  anzahl_stopper <- sum(pitstop_trigger)
+  
+  pitstop_time <- rep(0,anzahl_fahrer)
+  if (anzahl_stopper > 0){
+    #Logver. für Boxenstoppzeit
+    pitstop_time[pitstop_trigger] <- rlnorm(anzahl_stopper,meanlog=1.0 ,sdlog=0.2)
+    #L Reifenalter reset
+    l_tires_age[pitstop_trigger] <- 0
+  }
+  
   # Fehlerzeit zur Rundenzeit addieren
-  total_round_time <- b_round_time + penalty_time
+  total_round_time <- b_round_time + penalty_time + pitstop_time
   
   # N: Motorschaden prüfen
   # Wenn die aktuelle Runde die vorberechnete Ausfallrunde überschreitet, bekommt der   Fahrer eine unendliche Rundenzeit (Ausfall)
   b_round_time[n_motor_fail < runde] <- Inf
   
   # Ergebnis der 22 Fahrer in die aktuelle Zeile der Matrix schreiben
-  round_time_matrix[runde, ] <- b_round_time
+  round_time_matrix[runde, ] <- total_round_time
+  pitstop_time_matrix[runde, ] <- pitstop_time
+  penalty_count_matrix[runde, ] <- penalty_check
+  
+
 }
 
+```
+
+##A-Gesamtzeit ----fertig nur verschönern
+
+```{r, echo= True}
+a_total_time <- colSums(round_time_matrix)
+a_total_time /60 #in minuten
+#Zeiten aller 22 Fahrer
 ```
 
 ##Z- Platz am Ende
 
 ```{r, echo= FALSE}
-rank(A,ties.method ="min")
+z_placements <- rank(a_total_time, ties.method = "min")
 
 #wer am wenigste A hat oder bei N die meisten Runden gewinnt
 ```
 
-##A-Gesamtzeit ----fertig nur verschönern
+##C-Zeit für Boxenstopps
 
 ```{r, echo= FALSE}
-#Summe aller B,C,G
-colSums(round_time_matrix) #Zeiten aller 22 Fahrer
-```
 
-
-##C-Zeit für Boxenstopps ---neue Matrix vlt?
-
-```{r, echo= FALSE}
+c_total_box <- colSums(pitstop_time_matrix)
 #kum. summe der F eines fahrers über das ganze Rennen
 ```
 
 ##D-Strafen
 
 ```{r, echo= FALSE}
+
+d_total_penalty <- colSums(penalty_count_matrix)
 #Summe aller Runden in dennen I - einser geworfen hat
 ```
 
-
-##L- Reifenalter
-
 ```{r, echo= FALSE}
-#Runden zähler wird bei einen Boxenstopp C oder F wieder auf 0 gesetzt
-#siehe oben beim zähler mit auf 0 noch nicht ganz gemacht
+#Anzahl Boxenstops Counter
+anzahl_boxenstopps <- colSums(pitstop_time_matrix > 0)
+
 ```
 
+##Podim Header
 
-##Monte Carlo Sim
+```{r, echo= FALSE}
+#Podium
+ergebnis_df <- data.frame(
+  Fahrer_ID = 1:anzahl_fahrer,
+  Platz = z_placements,
+  Gesamtzeit= a_total_time/60,
+  Anzahl_strafen= d_total_penalty ,
+  Boxenzeit = c_total_box,
+  Boxenstops= anzahl_boxenstopps)
+
+ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
+ergebnis_df
+```
+
+##Stochastische Sim
 
 ```{r, echo= FALSE}
 
+```
+
+```{r, echo= FALSE}
+anzahl_boxenstopps <- colSums(pitstop_time_matrix > 0)
+anzahl_boxenstopps
+# D: Anzahl Strafen/Fehler
+d_total_penalty <- colSums(penalty_count_matrix)
+d_total_penalty
 ```
