@@ -7,7 +7,6 @@ editor: visual
 ## Fixe Parameter E/P/O/H/K bleiben bei MC sowie beim Test 1
 
 ```{r,echo=F}
-set.seed(42) 
 anzahl_fahrer <- 22
 
 #E-RundenAnzahl
