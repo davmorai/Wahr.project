@@ -196,11 +196,3 @@ ergebnis_df
 ```{r, echo= FALSE}
 
 ```
-
-```{r, echo= FALSE}
-anzahl_boxenstopps <- colSums(pitstop_time_matrix > 0)
-anzahl_boxenstopps
-# D: Anzahl Strafen/Fehler
-d_total_penalty <- colSums(penalty_count_matrix)
-d_total_penalty
-```
