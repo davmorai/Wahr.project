@@ -307,13 +307,37 @@ ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrsc
 ```
 ##Graph 3
 
-```{r, echo=FALSE}
+```{r, echo= FALSE}
+# --- Grafik 4: Reifentyp vs. Durchschnittliche Platzierung ---
 
+# Erwartete Platzierung pro Fahrer: gewichteter Durchschnitt über alle Plätze
+avg_position <- as.numeric(prob_matrix %*% (1:anzahl_fahrer))
 
+reifen_df <- data.frame(
+  Fahrer_ID         = 1:anzahl_fahrer,
+  Reifentyp         = factor(k_reifen$reifen_typ[start_reifen_fahrer], levels = c("Soft", "Medium", "Hard")),
+  Durchschnitt_Platz = avg_position
+)
 
+# Mittelwert pro Reifentyp für die Querlinie
+reifen_means <- aggregate(Durchschnitt_Platz ~ Reifentyp, data = reifen_df, FUN = mean)
 
-
-
-
-
+ggplot(reifen_df, aes(x = Reifentyp, y = Durchschnitt_Platz, color = Reifentyp)) +
+  geom_jitter(width = 0.15, size = 4, alpha = 0.85) +
+  geom_crossbar(
+    data = reifen_means,
+    aes(y = Durchschnitt_Platz, ymin = Durchschnitt_Platz, ymax = Durchschnitt_Platz),
+    width = 0.45, color = "black", linewidth = 0.8
+  ) +
+  scale_y_reverse(breaks = c(1, 5, 10, 15, 20, 22)) +
+  scale_color_manual(values = c("Soft" = "#E74C3C", "Medium" = "#F39C12", "Hard" = "#7F8C8D")) +
+  theme_minimal() +
+  labs(
+    title    = "Reifentyp vs. Durchschnittliche Platzierung",
+    subtitle = "Jeder Punkt = ein Fahrer | Querlinie = Gruppenmittelwert",
+    x        = "Reifentyp",
+    y        = "Durchschnittliche Platzierung",
+    color    = "Reifentyp"
+  ) +
+  guides(color = "none")
 ```
