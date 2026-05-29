@@ -253,6 +253,8 @@ ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
 print(ergebnis_df) #für schönere Darstellung sonst mehrere Tabs
 
 
+#daten präsentieren evtl anzahl von boxenstops und penalty zeiten zusammenzählen
+```
 ##Grafik1
 
 ```{r, echo= FALSE}
@@ -282,6 +284,7 @@ ggplot(podium_df, aes(x = Fahrer, y = Wahrscheinlichkeit, fill = Platz)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+
 ##Grafik2
 
 ```{r, echo= FALSE}
@@ -301,4 +304,16 @@ ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrsc
        y = "Fahrer ID",
        fill = "Wahrscheinlichkeit") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+##Graph 3
+
+```{r, echo=FALSE}
+
+
+
+
+
+
+
+
 ```
