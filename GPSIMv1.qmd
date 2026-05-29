@@ -253,26 +253,12 @@ ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
 print(ergebnis_df) #für schönere Darstellung sonst mehrere Tabs
 
 
-{r, echo= FALSE}
-# --- Grafik 3: Heatmap aller Platzierungen ---
-df_melted <- data.frame(
-  Fahrer      = rep(1:anzahl_fahrer, times = anzahl_fahrer),
-  Platzierung = rep(1:anzahl_fahrer, each  = anzahl_fahrer),
-  Wahrscheinlichkeit = as.vector(prob_matrix)
-)
+##Grafik1
 
-ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrscheinlichkeit)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient(low = "white", high = "red") +
-  theme_minimal() +
-  labs(title = "Monte Carlo Simulation: Wahrscheinlichkeitsverteilung der Platzierungen",
-       x = "Platzierung am Rennende",
-       y = "Fahrer ID",
-       fill = "Wahrscheinlichkeit") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```{r, echo= FALSE}
+# --- Grafik 1: Podiumswahrscheinlichkeit (Top 3) pro Fahrer ---
+library(ggplot2) #install.packages("ggplot2")
 
-{r, echo= FALSE}
-# --- Grafik 2: Podiumswahrscheinlichkeit (Top 3) pro Fahrer ---
 podium_df <- data.frame(
   Fahrer = rep(1:anzahl_fahrer, 3),
   Platz   = rep(c("Platz 1", "Platz 2", "Platz 3"), each = anzahl_fahrer),
@@ -294,22 +280,25 @@ ggplot(podium_df, aes(x = Fahrer, y = Wahrscheinlichkeit, fill = Platz)) +
        fill = "Platzierung") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
-{r, echo= FALSE}
-library(ggplot2) #install.packages("ggplot2")
+##Grafik2
 
-# --- Grafik 1: Siegwahrscheinlichkeit pro Fahrer ---
-sieg_prob <- prob_matrix[, 1]
-sieg_df <- data.frame(
-  Fahrer = factor(1:anzahl_fahrer),
-  Siegwahrscheinlichkeit = sieg_prob
+```{r, echo= FALSE}
+# --- Grafik 2: Heatmap aller Platzierungen ---
+df_melted <- data.frame(
+  Fahrer      = rep(1:anzahl_fahrer, times = anzahl_fahrer),
+  Platzierung = rep(1:anzahl_fahrer, each  = anzahl_fahrer),
+  Wahrscheinlichkeit = as.vector(prob_matrix)
 )
 
-ggplot(sieg_df, aes(x = reorder(Fahrer, -Siegwahrscheinlichkeit), y = Siegwahrscheinlichkeit)) +
-  geom_bar(stat = "identity", fill = "#C0392B") +
+ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrscheinlichkeit)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
   theme_minimal() +
-  labs(title = "Siegwahrscheinlichkeit pro Fahrer (10'000 Simulationen)",
-       x = "Fahrer ID",
-       y = "Wahrscheinlichkeit") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(title = "Monte Carlo Simulation: Wahrscheinlichkeitsverteilung der Platzierungen",
+       x = "Platzierung am Rennende",
+       y = "Fahrer ID",
+       fill = "Wahrscheinlichkeit") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
