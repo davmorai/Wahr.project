@@ -253,27 +253,13 @@ ergebnis_df <- ergebnis_df[order(ergebnis_df$Platz), ]
 print(ergebnis_df) #für schönere Darstellung sonst mehrere Tabs
 
 
-#daten präsentieren evtl anzahl von boxenstops und penalty zeiten zusammenzählen
-#visualisiere
-#präsentation - fragestellung, prozess detaliert beschreiben
-
-  
-```
-
-```{r, echo= FALSE}
-#Wahrscheinlichkeiten berechnen
-prob_matrix <- placements_matrix / n_sims
-prob_matrix
-```
-
-```{r, echo= FALSE}
-library(ggplot2) #install.packages("ggplot2")
-
-rownames(prob_matrix) <- 1:anzahl_fahrer
-colnames(prob_matrix) <- 1:anzahl_fahrer
-
-df_melted <- as.data.frame(as.table(prob_matrix))
-colnames(df_melted) <- c("Fahrer", "Platzierung", "Wahrscheinlichkeit")
+{r, echo= FALSE}
+# --- Grafik 3: Heatmap aller Platzierungen ---
+df_melted <- data.frame(
+  Fahrer      = rep(1:anzahl_fahrer, times = anzahl_fahrer),
+  Platzierung = rep(1:anzahl_fahrer, each  = anzahl_fahrer),
+  Wahrscheinlichkeit = as.vector(prob_matrix)
+)
 
 ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrscheinlichkeit)) +
   geom_tile(color = "white") +
@@ -284,51 +270,46 @@ ggplot(df_melted, aes(x = factor(Platzierung), y = factor(Fahrer), fill = Wahrsc
        y = "Fahrer ID",
        fill = "Wahrscheinlichkeit") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
-```
 
-```{r,echo = False}
-df_sieg <- data.frame(
+{r, echo= FALSE}
+# --- Grafik 2: Podiumswahrscheinlichkeit (Top 3) pro Fahrer ---
+podium_df <- data.frame(
+  Fahrer = rep(1:anzahl_fahrer, 3),
+  Platz   = rep(c("Platz 1", "Platz 2", "Platz 3"), each = anzahl_fahrer),
+  Wahrscheinlichkeit = c(prob_matrix[, 1], prob_matrix[, 2], prob_matrix[, 3])
+)
+podium_df$Platz <- factor(podium_df$Platz, levels = c("Platz 3", "Platz 2", "Platz 1"))
+
+# Fahrer nach Gesamtpodiumschance sortieren
+podium_order <- order(-(prob_matrix[,1] + prob_matrix[,2] + prob_matrix[,3]))
+podium_df$Fahrer <- factor(podium_df$Fahrer, levels = podium_order)
+
+ggplot(podium_df, aes(x = Fahrer, y = Wahrscheinlichkeit, fill = Platz)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Platz 1" = "#C0392B", "Platz 2" = "#E67E22", "Platz 3" = "#F1C40F")) +
+  theme_minimal() +
+  labs(title = "Podiumswahrscheinlichkeit pro Fahrer (Top 3)",
+       x = "Fahrer ID (sortiert nach Podiumschance)",
+       y = "Wahrscheinlichkeit",
+       fill = "Platzierung") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+{r, echo= FALSE}
+library(ggplot2) #install.packages("ggplot2")
+
+# --- Grafik 1: Siegwahrscheinlichkeit pro Fahrer ---
+sieg_prob <- prob_matrix[, 1]
+sieg_df <- data.frame(
   Fahrer = factor(1:anzahl_fahrer),
-  Sieg_Wahrscheinlichkeit = prob_matrix[, 1]
+  Siegwahrscheinlichkeit = sieg_prob
 )
 
-# Balkendiagramm zeichnen (Absteigend sortiert)
-ggplot(df_sieg, aes(x = reorder(Fahrer, -Sieg_Wahrscheinlichkeit), y = Sieg_Wahrscheinlichkeit)) +
-  geom_col(fill = "steelblue") +
+ggplot(sieg_df, aes(x = reorder(Fahrer, -Siegwahrscheinlichkeit), y = Siegwahrscheinlichkeit)) +
+  geom_bar(stat = "identity", fill = "#C0392B") +
   theme_minimal() +
-  labs(title = "Wer gewinnt den Grand Prix?",
+  labs(title = "Siegwahrscheinlichkeit pro Fahrer (10'000 Simulationen)",
        x = "Fahrer ID",
-       y = "Sieg-Wahrscheinlichkeit") +
-  # Macht die Y-Achse als saubere Prozentzahlen
-  scale_y_continuous(labels = scales::percent_format())
-```
-
-```{r, echo=FALSE}
-
-# 1. KORREKTUR: Wir geben der Matrix vorher explizit Namen (1 bis 22)
-rownames(prob_matrix) <- 1:anzahl_fahrer
-colnames(prob_matrix) <- 1:anzahl_fahrer
-
-# 2. Jetzt klappt die Umwandlung perfekt
-df_melted <- as.data.frame(as.table(prob_matrix))
-colnames(df_melted) <- c("Fahrer", "Platzierung", "Wahrscheinlichkeit")
-
-# 3. Wir filtern uns nur 3 spezifische Fahrer heraus (z.B. Team 1 und das schlechteste Team)
-ausgewaehlte_fahrer <- c("1", "2", "22")
-df_gefiltert <- subset(df_melted, Fahrer %in% ausgewaehlte_fahrer)
-
-# 4. Liniendiagramm zeichnen
-# WICHTIG: as.numeric(as.character(...)) wandelt den Faktor sicher in Zahlen für die X-Achse
-ggplot(df_gefiltert, aes(x = as.numeric(as.character(Platzierung)), 
-                         y = Wahrscheinlichkeit, 
-                         color = Fahrer, 
-                         group = Fahrer)) +
-  geom_line(linewidth = 1.2) + # linewidth statt size für neuere ggplot-Versionen
-  geom_point(size = 3) +
-  theme_minimal() +
-  labs(title = "Verteilungskurven: Top-Team vs. Schlusslicht",
-       x = "Platzierung am Ende",
        y = "Wahrscheinlichkeit") +
-  scale_x_continuous(breaks = 1:22) +
-  scale_y_continuous(labels = scales::percent_format())
-```
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
